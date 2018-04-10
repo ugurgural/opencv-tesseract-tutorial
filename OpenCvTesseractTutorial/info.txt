@@ -1,0 +1,12 @@
+magick convert c.png -morphology close:6 "1x4: 0,1,1,0" result.png
+
+1- 6422 - fail
+2- 8234 - fail
+3- 3033 - fail
+4- 9401 - ok
+5- 8845 - ok
+6- 1536 - fail
+7- 2401 - ok
+8- 1694 - fail
+9- 7363 - ok
+10- 4112 - ok
