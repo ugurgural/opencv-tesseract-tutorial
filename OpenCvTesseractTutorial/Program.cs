@@ -5,6 +5,7 @@ using OpenQA.Selenium.Chrome;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Tesseract;
 
 namespace OpenCvTesseractTutorial
@@ -19,6 +20,13 @@ namespace OpenCvTesseractTutorial
             string OcrResult = OcrCaptcha(linelessCaptcha);
         }
 
+
+        /// <summary>
+        /// Selenium operation for extracting captcha from the desired webpage. Note that the screen resolution and captcha coordinates are machine-specific and needs to be reviewed if resolution is different than 1920x1080.
+        /// </summary>
+        /// <param name="pageUrl">Url of the web page</param>
+        /// <param name="isGenerateLocalCopies">Turn this on if you want to save captcha files that processed to see the steps</param>
+        /// <returns></returns>
         static Bitmap GetCaptchaFromWebPage(string pageUrl, bool isGenerateLocalCopies = false)
         {
             Bitmap bmpCaptcha = null;
@@ -26,6 +34,7 @@ namespace OpenCvTesseractTutorial
             using (var driver = new ChromeDriver(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)))
             {
                 driver.Navigate().GoToUrl(pageUrl);
+                driver.Manage().Window.Size = new System.Drawing.Size(1920, 1080);
                 driver.Manage().Window.Maximize();
                 driver.ExecuteScript("document.body.style.zoom = '200%'");
                 driver.ExecuteScript("window.scrollTo(0, 250);");
@@ -48,6 +57,12 @@ namespace OpenCvTesseractTutorial
             return bmpCaptcha;
         }
 
+        /// <summary>
+        /// Second and last operation for handling captcha, sharpen the image and remove the line that crossing the captcha to make it readable for ocr operation.
+        /// </summary>
+        /// <param name="captchaBmp">Bitmap of captcha</param>
+        /// <param name="isGenerateLocalCopies">Turn this on if you want to save captcha files that processed to see the steps</param>
+        /// <returns>Bitmap of processed captcha</returns>
         static Bitmap RemoveLinesFromCaptcha(Bitmap captchaBmp, bool isGenerateLocalCopies = false)
         {
             // load the file
@@ -70,28 +85,8 @@ namespace OpenCvTesseractTutorial
                 Mat bw = new Mat();
                 Cv2.AdaptiveThreshold(~gray, bw, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 15, -2);
 
-                // Create the images that will use to extract the horizontal and vertical lines
-                Mat horizontal = bw.Clone();
-                Mat vertical = bw.Clone();
-
-                // Specify size on horizontal axis
-                int horizontalsize = horizontal.Cols / 8;
-                // Create structure element for extracting horizontal lines through morphology operations
-                Mat horizontalStructure = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(horizontalsize, 1));
-                // Apply morphology operations
-                Cv2.Erode(horizontal, horizontal, horizontalStructure, new OpenCvSharp.Point(-1, -1));
-                Cv2.Dilate(horizontal, horizontal, horizontalStructure, new OpenCvSharp.Point(-1, -1));
-
-                // Specify size on vertical axis
-                int verticalsize = vertical.Rows / 30;
-                // Create structure element for extracting vertical lines through morphology operations           
-                Mat verticalStructure = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(1, verticalsize));
-                // Apply morphology operations
-                Cv2.Erode(vertical, vertical, verticalStructure, new OpenCvSharp.Point(-1, -1));
-                Cv2.Dilate(vertical, vertical, verticalStructure, new OpenCvSharp.Point(-1, -1));
-
                 // Inverse vertical image
-                Cv2.BitwiseNot(vertical, vertical);
+                Cv2.BitwiseNot(bw, bw);
 
                 // Extract edges and smooth image according to the logic
                 // 1. extract edges
@@ -101,35 +96,41 @@ namespace OpenCvTesseractTutorial
                 // 5. smooth.copyTo(src, edges)
                 // Step 1
                 Mat edges = new Mat();
-                Cv2.AdaptiveThreshold(vertical, edges, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 3, -2);
+                Cv2.AdaptiveThreshold(bw, edges, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 3, -2);
                 // Step 2
                 Mat kernel = Mat.Ones(2, 2, MatType.CV_8UC1);
                 Cv2.Dilate(edges, edges, kernel);
                 // Step 3
                 Mat smooth = new Mat();
-                vertical.CopyTo(smooth);
+                bw.CopyTo(smooth);
                 // Step 4
                 Cv2.Blur(smooth, smooth, new OpenCvSharp.Size(2, 2));
                 // Step 5
-                smooth.CopyTo(vertical, edges);
+                smooth.CopyTo(bw, edges);
 
-                MagickImage image = new MagickImage(vertical.ToBitmap());
+                //Remove lines using imagemagick's morphology tool
+                MagickImage image = new MagickImage(bw.ToBitmap());
                 image.Morphology(MorphologyMethod.Close, "1x4: 0,1,1,0", 7);
                 Bitmap bmpCaptchaLineRemoved = image.ToBitmap();
 
                 if (isGenerateLocalCopies)
                 {
-                    Bitmap bmpBlurred = BitmapConverter.ToBitmap(vertical);
+                    Bitmap bmpBlurred = BitmapConverter.ToBitmap(bw);
                     bmpBlurred.Save(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\blurred.png");
                     bmpCaptchaLineRemoved.Save(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\lineRemoved.png");
                 }
 
-                
                 image.Dispose();
                 return bmpCaptchaLineRemoved;
             }
         }
 
+        /// <summary>
+        /// First operation handling captcha, convert image to grayscale, remove all little noises, make it b&w.
+        /// </summary>
+        /// <param name="captchaBmp">Bitmap of captcha</param>
+        /// <param name="isGenerateLocalCopies">Turn this on if you want to save captcha files that processed to see the steps</param>
+        /// <returns>Bitmap of processed captcha</returns>
         static Bitmap ConvertCaptchaToBlackAndWhite(Bitmap captchaBmp, bool isGenerateLocalCopies = false)
         {
             // load the file
@@ -190,18 +191,31 @@ namespace OpenCvTesseractTutorial
             }
         }
 
-        public static string OcrCaptcha(Bitmap b)
+        /// <summary>
+        /// Doing the final ocr process with tesseract.
+        /// </summary>
+        /// <param name="captchaBmp">Bitmap of captcha</param>
+        /// <returns>String of captcha</returns>
+        public static string OcrCaptcha(Bitmap captchaBmp)
         {
-            string res = "";
+            string captchaText = string.Empty;
+
             using (var engine = new TesseractEngine(@"tessdata", "eng", EngineMode.Default))
             {
+                //Set engine to process only numeric characters
+                engine.DefaultPageSegMode = PageSegMode.SingleLine;
+                engine.SetVariable("tessedit_char_blacklist", "!?@#$%&*()<>_-+=/:;'\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
                 engine.SetVariable("tessedit_char_whitelist", "1234567890");
                 engine.SetVariable("tessedit_unrej_any_wd", true);
-                engine.SetVariable("classify_bln_numeric_mode", true);
-                using (var page = engine.Process(b, PageSegMode.SingleWord))
-                    res = page.GetText();
+                engine.SetVariable("classify_bln_numeric_mode", "1");
+
+                using (var page = engine.Process(captchaBmp, PageSegMode.SingleWord))
+                {
+                    captchaText = Regex.Replace(page.GetText(), "[ \n\r\t]", "");
+                }
             }
-            return res;
+
+            return captchaText;
         }
     }
 }
