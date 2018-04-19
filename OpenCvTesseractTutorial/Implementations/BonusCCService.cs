@@ -7,6 +7,7 @@ using System.Drawing;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using OpenCvTesseractTutorial.Interfaces;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using Tesseract;
@@ -16,7 +17,7 @@ namespace OpenCvTesseractTutorial.Implementations
     /// <summary>
     /// Auto Application Processing Implementation For Garanti Bonus Card
     /// </summary>
-    public class BonusCCService
+    public class BonusCCService  : ICaptchaImplementation
     {
 
         public bool ProcessApplication(CCApplicant applicantInfo)
@@ -40,7 +41,7 @@ namespace OpenCvTesseractTutorial.Implementations
 
                 if (!string.IsNullOrWhiteSpace(decodedCaptchaText))
                 {
-                    // For selecting the card type in page, we have to resize to window to mobile size to choose cardtype from dropdown. Otherwise there is a gallery showing in desktop mode for card type selection, which is hard to manipulate the dom.
+                    // For selecting the card type in page, we have to resize to window to mobile size to choose cardtype from dropdown. Otherwise there is a gallery showing in desktop mode for card type selection, which is harder to manipulate the dom.
                     driver.Manage().Window.Size = new System.Drawing.Size(480, 1080);
                     driver.ExecuteScript("document.body.style.zoom = '100%'");
 
@@ -52,7 +53,6 @@ namespace OpenCvTesseractTutorial.Implementations
                     var cardTypeSelect = new SelectElement(driver.FindElement(By.CssSelector(".hidden-select")).FindElement(By.TagName("select")));
                     cardTypeSelect.SelectByText(applicantInfo.AppliedCCName);
 
-                    //driver.FindElement(By.XPath($"//*[@data-name='{ applicantInfo.AppliedCCName }']")).Click();
                     driver.FindElement(By.CssSelector(".input.captcha")).SendKeys(decodedCaptchaText);
                     driver.FindElement(By.Id("yasalsozlesme")).Click();
 

@@ -1,8 +1,9 @@
-﻿
+﻿using OpenCvTesseractTutorial.Dto;
+
 namespace OpenCvTesseractTutorial.Interfaces
 {
     interface ICaptchaImplementation
     {
-        void ProcessApplication();
+        bool ProcessApplication(CCApplicant applicantInfo);
     }
 }
