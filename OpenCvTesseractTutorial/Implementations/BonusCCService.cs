@@ -19,6 +19,8 @@ namespace OpenCvTesseractTutorial.Implementations
     /// </summary>
     public class BonusCCService  : ICaptchaImplementation
     {
+        public const string ApplicationSuccessMessage = "";
+        public const string ApplicationRejectedMessage = "KREDİ KARTI BAŞVURUNUZ ŞU AN İÇİN OLUMLU OLARAK DEĞERLENDİRİLEMEMİŞTİR.";
 
         public bool ProcessApplication(CCApplicant applicantInfo)
         {
@@ -46,6 +48,7 @@ namespace OpenCvTesseractTutorial.Implementations
                     driver.ExecuteScript("document.body.style.zoom = '100%'");
 
                     driver.FindElement(By.CssSelector(".input.text.names")).SendKeys(applicantInfo.FirstName);
+
                     driver.FindElement(By.CssSelector(".input.text.surnames")).SendKeys(applicantInfo.LastName);
                     driver.FindElement(By.CssSelector(".input.phone-number")).SendKeys(applicantInfo.PhoneNumber);
                     driver.FindElement(By.CssSelector(".input.tc-number")).SendKeys(applicantInfo.TcIdentityNo);
